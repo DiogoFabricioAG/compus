@@ -5,9 +5,10 @@ from textual.containers import Container, Horizontal, Vertical, ScrollableContai
 from textual.widgets import Header, Footer, Button, RichLog, Label, Static
 from textual.reactive import reactive
 from textual.binding import Binding
+from textual import work
 
 from compus.git_helper import GitHelper
-from compus.ui.modals import CommitModal, ConfirmModal, BranchModal, StashModal, MergeModal, RemoteModal
+from compus.ui.modals import CommitModal, ConfirmModal, BranchModal, RemoteModal
 
 # Textual TUI Stylesheet (Fully compliant with Textual CSS parser)
 CSS = """
@@ -50,8 +51,8 @@ Footer {
 
 #action-buttons {
     layout: grid;
-    grid-size: 4;
-    grid-columns: 1fr 1fr 1fr 1fr;
+    grid-size: 3;
+    grid-columns: 1fr 1fr 1fr;
     grid-rows: 3 3;
     grid-gutter: 1;
     height: 7;
@@ -69,9 +70,8 @@ Button {
 #btn-pull { background: #223249; color: #7aa2f7; }
 #btn-push { background: #1b3a24; color: #73daca; }
 #btn-branch { background: #38294a; color: #bb9af7; }
-#btn-stash { background: #3b3a32; color: #e0af68; }
-#btn-merge { background: #41242c; color: #f7768e; }
 #btn-remote { background: #2b3c54; color: #2ac3de; }
+#btn-discard { background: #4e1c24; color: #f7768e; }
 
 Button:hover {
     background: #565f89;
@@ -197,9 +197,8 @@ class CompusApp(App):
         Binding("p", "pull", "Pull", show=True),
         Binding("u", "push", "Push", show=True),
         Binding("b", "branch", "Branches", show=True),
-        Binding("s", "stash", "Stash", show=True),
-        Binding("m", "merge", "Merge", show=True),
         Binding("g", "remote", "Set Remote", show=True),
+        Binding("d", "discard", "Discard Changes", show=True),
         Binding("r", "refresh", "Refresh Status", show=True),
         Binding("q", "quit", "Quit", show=True),
     ]
@@ -238,15 +237,14 @@ class CompusApp(App):
                 
             # Right Panel: Quick Commands & Console Output
             with Vertical(id="main-panel"):
-                # Action Buttons Grid (4 columns)
+                # Action Buttons Grid (3 columns, 6 buttons)
                 with Container(id="action-buttons"):
                     yield Button("💬 [C] Commit", id="btn-commit")
                     yield Button("⬇️ [P] Pull", id="btn-pull")
                     yield Button("⬆️ [U] Push", id="btn-push")
                     yield Button("🌿 [B] Branches", id="btn-branch")
-                    yield Button("📦 [S] Stash", id="btn-stash")
-                    yield Button("🔀 [M] Merge", id="btn-merge")
                     yield Button("🌐 [G] Remote", id="btn-remote")
+                    yield Button("🗑️ [D] Discard", id="btn-discard")
                 
                 # Logs container
                 with Container(id="log-container"):
@@ -273,6 +271,21 @@ class CompusApp(App):
 
         self.log_widget.write(f"[bold green]🚀 Welcome to Compus![/bold green] Managing repo at: [bold cyan]{self.path}[/bold cyan]\n")
         self.refresh_status()
+        
+        # Real-time background workers and timers
+        self.set_interval(2.0, self.auto_refresh_local)
+        self.set_interval(15.0, self.auto_refresh_remote)
+
+    def auto_refresh_local(self) -> None:
+        """Fast periodic local refresh."""
+        self.refresh_status()
+
+    @work(thread=True)
+    def auto_refresh_remote(self) -> None:
+        """Slower background remote fetch (run in secondary thread to avoid TUI freezing)."""
+        if self.git.is_git_repo():
+            self.git.fetch()
+            self.call_from_thread(self.refresh_status)
 
     def refresh_status(self) -> None:
         """Retrieves latest branch, files status, and sync state to update the UI."""
@@ -329,7 +342,7 @@ class CompusApp(App):
     # Action Handlers / Bindings
     def action_refresh(self) -> None:
         self.log_widget.write("[blue]🔄 Refreshing repository status...[/blue]")
-        # Silent fetch in background to verify behind/ahead status
+        # Force foreground fetch and refresh
         self.git.fetch()
         self.refresh_status()
         self.log_widget.write("[green]✓ Status refreshed successfully.[/green]")
@@ -346,14 +359,11 @@ class CompusApp(App):
     def action_branch(self) -> None:
         self.press_button("btn-branch")
 
-    def action_stash(self) -> None:
-        self.press_button("btn-stash")
-
-    def action_merge(self) -> None:
-        self.press_button("btn-merge")
-
     def action_remote(self) -> None:
         self.press_button("btn-remote")
+
+    def action_discard(self) -> None:
+        self.press_button("btn-discard")
 
     def press_button(self, button_id: str) -> None:
         try:
@@ -389,20 +399,18 @@ class CompusApp(App):
             branches = self.git.get_branches()
             self.push_screen(BranchModal(current, branches), self.handle_branch_result)
             
-        elif event.button.id == "btn-stash":
-            self.push_screen(StashModal(), self.handle_stash_result)
-            
-        elif event.button.id == "btn-merge":
-            current = self.git.get_current_branch()
-            branches = self.git.get_branches()
-            if len(branches) <= 1:
-                self.log_widget.write("[yellow]⚠️ Cannot merge: No other local branches exist.[/yellow]")
-                return
-            self.push_screen(MergeModal(current, branches), self.handle_merge_result)
-            
         elif event.button.id == "btn-remote":
             current_url = self.git.get_remote_url()
             self.push_screen(RemoteModal(current_url), self.handle_remote_result)
+            
+        elif event.button.id == "btn-discard":
+            self.push_screen(
+                ConfirmModal(
+                    message="⚠️ WARNING: This will PERMANENTLY erase all your uncommitted local changes (both modified and untracked files). This action CANNOT be undone!\n\nDo you want to proceed?",
+                    title="Discard All Changes"
+                ),
+                self.handle_discard_result
+            )
 
     # Callbacks for modal results
     def handle_commit_result(self, result: tuple[str, str] | None) -> None:
@@ -475,61 +483,6 @@ class CompusApp(App):
             
         self.refresh_status()
 
-    def handle_stash_result(self, stash_msg: str | None) -> None:
-        if stash_msg is None:
-            # Let's check if they want to POP the stash instead, or if they cancelled
-            self.push_screen(
-                ConfirmModal(
-                    message="Would you like to POP (restore) the most recent stash onto your working tree?",
-                    title="Restore Stash (Pop)"
-                ),
-                self.handle_stash_pop_confirm
-            )
-            return
-
-        self.log_widget.write("[yellow]Stashing current local changes...[/yellow]")
-        success, output = self.git.stash_push(stash_msg)
-        
-        if success:
-            self.log_widget.write("[bold green]✓ Changes stashed successfully![/bold green]")
-            self.log_widget.write(f"[dim]{output}[/dim]\n")
-        else:
-            self.log_widget.write(f"[bold red]❌ Git Stash Failed:[/bold red]\n[red]{output}[/red]\n")
-            
-        self.refresh_status()
-
-    def handle_stash_pop_confirm(self, confirmed: bool) -> None:
-        if not confirmed:
-            self.log_widget.write("[yellow]Stash action cancelled.[/yellow]")
-            return
-            
-        self.log_widget.write("[yellow]Popping latest stash...[/yellow]")
-        success, output = self.git.stash_pop()
-        
-        if success:
-            self.log_widget.write("[bold green]✓ Stash popped successfully![/bold green]")
-            self.log_widget.write(f"[dim]{output}[/dim]\n")
-        else:
-            self.log_widget.write(f"[bold red]❌ Git Stash Pop Failed (maybe no stashes exist or conflicts occurred):[/bold red]\n[red]{output}[/red]\n")
-            
-        self.refresh_status()
-
-    def handle_merge_result(self, branch_to_merge: str | None) -> None:
-        if not branch_to_merge:
-            self.log_widget.write("[yellow]Merge action cancelled.[/yellow]")
-            return
-            
-        self.log_widget.write(f"[yellow]Merging branch '{branch_to_merge}' into current branch...[/yellow]")
-        success, output = self.git.merge(branch_to_merge)
-        
-        if success:
-            self.log_widget.write(f"[bold green]✓ Merge applied successfully![/bold green]")
-            self.log_widget.write(f"[dim]{output}[/dim]\n")
-        else:
-            self.log_widget.write(f"[bold red]❌ Merge Failed or requires manual conflict resolution:[/bold red]\n[red]{output}[/red]\n")
-            
-        self.refresh_status()
-
     def handle_remote_result(self, url: str | None) -> None:
         if url is None:
             self.log_widget.write("[yellow]Remote configuration cancelled.[/yellow]")
@@ -547,6 +500,22 @@ class CompusApp(App):
             self.log_widget.write(f"[dim]{output}[/dim]\n")
         else:
             self.log_widget.write(f"[bold red]❌ Failed to set remote:[/bold red]\n[red]{output}[/red]\n")
+            
+        self.refresh_status()
+
+    def handle_discard_result(self, confirmed: bool) -> None:
+        if not confirmed:
+            self.log_widget.write("[yellow]Discard changes cancelled.[/yellow]")
+            return
+            
+        self.log_widget.write("[yellow]Wiping all local changes (reset --hard & clean)...[/yellow]")
+        success, output = self.git.discard_all_changes()
+        
+        if success:
+            self.log_widget.write("[bold green]✓ Local changes successfully discarded! Workspace reverted to latest commit.[/bold green]")
+            self.log_widget.write(f"[dim]{output}[/dim]\n")
+        else:
+            self.log_widget.write(f"[bold red]❌ Failed to discard changes:[/bold red]\n[red]{output}[/red]\n")
             
         self.refresh_status()
 

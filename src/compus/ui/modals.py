@@ -132,64 +132,6 @@ class BranchModal(ModalScreen[tuple[str, str, str] | None]):
             self.dismiss(None)
 
 
-class StashModal(ModalScreen[str | None]):
-    """Modal for git stash save message."""
-    
-    def compose(self) -> ComposeResult:
-        yield Vertical(
-            Label("📦 Stash Current Changes", id="modal-title"),
-            Label("Optional Stash Message:"),
-            Input(placeholder="Type an optional message for this stash...", id="stash-message-input"),
-            Horizontal(
-                Button("Stash Changes", variant="primary", id="btn-stash"),
-                Button("Cancel", variant="error", id="btn-cancel"),
-                id="modal-buttons"
-            ),
-            id="modal-container"
-        )
-
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        if event.button.id == "btn-stash":
-            msg = self.query_one("#stash-message-input").value.strip()
-            self.dismiss(msg)
-        else:
-            self.dismiss(None)
-
-
-class MergeModal(ModalScreen[str | None]):
-    """Modal to select branch to merge into current."""
-    
-    def __init__(self, current_branch: str, branches: list[str]):
-        super().__init__()
-        self.current_branch = current_branch
-        self.branches = [b for b in branches if b != current_branch]
-
-    def compose(self) -> ComposeResult:
-        options = [(b, b) for b in self.branches]
-        
-        yield Vertical(
-            Label("🔀 Merge Branches", id="modal-title"),
-            Label(f"Active branch: {self.current_branch}"),
-            Label("Select branch to merge INTO current:"),
-            Select(options, placeholder="Select a branch...", id="merge-branch-select"),
-            Horizontal(
-                Button("Merge Branch", variant="warning", id="btn-merge"),
-                Button("Cancel", variant="error", id="btn-cancel"),
-                id="modal-buttons"
-            ),
-            id="modal-container"
-        )
-
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        if event.button.id == "btn-merge":
-            selected = self.query_one("#merge-branch-select").value
-            if not selected:
-                return
-            self.dismiss(selected)
-        else:
-            self.dismiss(None)
-
-
 class RemoteModal(ModalScreen[str | None]):
     """Modal for configuring the origin remote repository URL."""
     

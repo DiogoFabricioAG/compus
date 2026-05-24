@@ -13,9 +13,9 @@ Compus is a modern Git Repository Manager TUI built with **Python (3.13+)**, **U
 - **`src/compus/git_helper.py`:** Wrapper around Git subprocesses. Uses `shell=True` to run cleanly on Windows. Safely parses modified/untracked/staged statuses, and calculates commits `ahead`/`behind` remote upstreams.
 - **`src/compus/ui/modals.py`:** Modal screen dialogs for:
   - Commit (Structured Conventional Commits helper).
-  - Confirm (Push/Pull confirmation dialogs).
+  - Confirm (Push/Pull/Discard confirmation dialogs).
   - Branch (Switching & creation).
-  - Stash & Merge.
+  - Remote (GitHub Remote configuration modal).
 - **`src/compus/main.py`:** Main entry point of the Textual App containing TUI styling, responsive reactive alerts, sidebar info, button layouts, and the live log viewer.
 
 ## ⚠️ Important Quirks & Windows Compatibility

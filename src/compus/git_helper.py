@@ -141,17 +141,11 @@ class GitHelper:
         code, stdout, stderr = self._run(["checkout", "-b", branch])
         return code == 0, stdout or stderr
 
-    def stash_push(self, message: str = "") -> tuple[bool, str]:
-        args = ["stash", "push"]
-        if message:
-            args += ["-m", message]
-        code, stdout, stderr = self._run(args)
-        return code == 0, stdout or stderr
-
-    def stash_pop(self) -> tuple[bool, str]:
-        code, stdout, stderr = self._run(["stash", "pop"])
-        return code == 0, stdout or stderr
-
-    def merge(self, branch: str) -> tuple[bool, str]:
-        code, stdout, stderr = self._run(["merge", branch, "--no-edit"])
-        return code == 0, stdout or stderr
+    def discard_all_changes(self) -> tuple[bool, str]:
+        """Erase all local modifications and untracked files."""
+        code_reset, stdout_reset, stderr_reset = self._run(["reset", "--hard", "HEAD"])
+        code_clean, stdout_clean, stderr_clean = self._run(["clean", "-fd"])
+        
+        success = (code_reset == 0 and code_clean == 0)
+        output = f"{stdout_reset or stderr_reset}\n{stdout_clean or stderr_clean}".strip()
+        return success, output
