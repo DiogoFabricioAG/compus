@@ -1,0 +1,12 @@
+[project]
+name = "compus"
+version = "0.1.0"
+description = "Git TUI manager powered by UV and Textual"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "textual>=0.85.0",
+]
+
+[project.scripts]
+compus = "compus.main:run_app"
